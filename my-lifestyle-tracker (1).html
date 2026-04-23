@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="My Tracker"/>
+<title>My Lifestyle Tracker 🌸</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{background:#FAF8F3;font-family:'DM Sans',sans-serif;overscroll-behavior:none;}
+  input:focus{outline:none;}
+  button:active{opacity:0.85;}
+  ::-webkit-scrollbar{display:none;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const STORAGE_KEY = "lft-v1-";
+const WEIGHT_KEY = "lft-weight-v1";
+const toDateKey = (d = new Date()) => d.toISOString().slice(0, 10);
+
+const defaultHabits = () => ({
+  wakeUpOnTime: false, cookBreakfast: false, cookLunchPacked: false,
+  schoolDropoff: false, selfBreakfast: false, morningMeds: false,
+  gym: false, walk30: false, stretching: false,
+  cleanEating: false, noOutsideFood: false, waterLitres: 0,
+  reading: false, techLearning: false,
+  skinAM: false, skinPM: false, hairCare: false, vitamins: false,
+  noScroll9pm: false, inBedBy11: false, sleepHours: 0, mood: "",
+});
+
+const TABS = [
+  { id: "dashboard", label: "Today", icon: "🌸" },
+  { id: "morning",   label: "Morning", icon: "☀️" },
+  { id: "fitness",   label: "Fitness", icon: "💪" },
+  { id: "nutrition", label: "Eat Clean", icon: "🥗" },
+  { id: "wellness",  label: "Wellness", icon: "✨" },
+  { id: "learn",     label: "Books", icon: "📚" },
+  { id: "expenses",  label: "Money", icon: "💰" },
+  { id: "goals",     label: "Goals", icon: "🎯" },
+];
+
+const MOODS = ["😴","😔","😐","🙂","😊","🌟"];
+const HEIGHT_M = 1.6256;
+const CURRENT_WEIGHT = 72;
+const GOAL_WEIGHT = 62;
+const JULY_TARGET = 66;
+
+const calcBMI = w => (w / (HEIGHT_M * HEIGHT_M)).toFixed(1);
+const bmiCategory = b => b < 18.5 ? {label:"Underweight",color:"#3498db"} :
+  b < 25 ? {label:"Healthy",color:"#27ae60"} :
+  b < 30 ? {label:"Overweight",color:"#e67e22"} :
+  {label:"Obese",color:"#e74c3c"};
+
+const S = {
+  app:{fontFamily:"'DM Sans',sans-serif",background:"#FAF8F3",minHeight:"100vh",maxWidth:430,margin:"0 auto",paddingBottom:82},
+  header:{background:"linear-gradient(135deg,#5C8B6B,#3D6B52)",padding:"28px 20px 18px",color:"#fff"},
+  greeting:{fontSize:21,fontWeight:700,fontFamily:"'Playfair Display',serif",marginBottom:2},
+  dateStr:{fontSize:12,opacity:.8,marginBottom:12},
+  streakRow:{display:"flex",gap:8,flexWrap:"wrap"},
+  badge:{background:"rgba(255,255,255,.18)",borderRadius:20,padding:"4px 11px",fontSize:11,fontWeight:600},
+  nav:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,
+    background:"#fff",borderTop:"1px solid #EAE5DA",display:"flex",justifyContent:"space-around",
+    padding:"8px 0 12px",zIndex:100,boxShadow:"0 -4px 20px rgba(0,0,0,.07)"},
+  navItem:a=>({display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",
+    padding:"4px 8px",borderRadius:12,background:a?"#EEF4EF":"transparent"}),
+  navIcon:{fontSize:17},
+  navLabel:a=>({fontSize:9,fontWeight:a?700:500,color:a?"#5C8B6B":"#888"}),
+  card:{background:"#fff",borderRadius:18,padding:"16px 18px",marginBottom:14,
+    boxShadow:"0 2px 12px rgba(0,0,0,.06)",border:"1px solid #F0EBE0"},
+  cardTitle:{fontSize:12,fontWeight:700,color:"#5C8B6B",textTransform:"uppercase",letterSpacing:1,marginBottom:12},
+  page:{padding:"16px 16px 8px"},
+  row:{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F5F0E8",cursor:"pointer"},
+  cb:c=>({width:24,height:24,borderRadius:8,border:c?"none":"2px solid #C8BDAA",
+    background:c?"linear-gradient(135deg,#5C8B6B,#3D6B52)":"transparent",
+    display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s",cursor:"pointer"}),
+  hlabel:c=>({fontSize:14,fontWeight:500,color:c?"#aaa":"#2D3436",textDecoration:c?"line-through":"none",flex:1}),
+  hnote:{fontSize:11,color:"#B0A898",marginTop:1},
+  prog:{background:"#EEF4EF",borderRadius:99,height:8,overflow:"hidden",marginTop:8},
+  progBar:(p,col="#5C8B6B")=>({background:`linear-gradient(90deg,${col},${col}CC)`,height:"100%",
+    width:`${Math.min(p,100)}%`,borderRadius:99,transition:"width .6s ease"}),
+  bmiCard:{background:"linear-gradient(135deg,#C4775A22,#C4775A11)",border:"1px solid #C4775A33",
+    borderRadius:18,padding:"16px 18px",marginBottom:14},
+  pill:c=>({display:"inline-block",background:c+"22",color:c,borderRadius:99,padding:"2px 10px",fontSize:11,fontWeight:600,marginRight:6,marginTop:4}),
+  btn:{background:"linear-gradient(135deg,#5C8B6B,#3D6B52)",color:"#fff",border:"none",borderRadius:12,
+    padding:"10px 20px",fontSize:13,fontWeight:700,cursor:"pointer",width:"100%",marginTop:8},
+  inp:{border:"1.5px solid #E0D9CC",borderRadius:10,padding:"8px 12px",fontSize:14,width:"100%",
+    background:"#FAF8F3",color:"#2D3436",boxSizing:"border-box"},
+  sectionLabel:{fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif",color:"#2D3436",marginBottom:14},
+  tip:{background:"#EEF4EF",border:"1px solid #C8DDCA",borderRadius:12,padding:"10px 14px",
+    fontSize:12,color:"#3D6B52",lineHeight:1.5,marginBottom:14},
+  timeTag:{fontSize:11,background:"#FFF3E0",color:"#E67E22",borderRadius:99,padding:"2px 8px",fontWeight:600,marginLeft:"auto"},
+  ringWrap:{display:"flex",justifyContent:"center",alignItems:"center",gap:20,marginBottom:8},
+  grid2:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14},
+};
+
+function Checkbox({checked,onClick}){
+  return <div style={S.cb(checked)} onClick={onClick}>
+    {checked && <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
+      <path d="M1 4L4.5 7.5L11 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>}
+  </div>;
+}
+
+function HItem({label,note,checked,onToggle,timeTag}){
+  return <div style={S.row} onClick={onToggle}>
+    <Checkbox checked={checked} onClick={e=>{e.stopPropagation();onToggle();}}/>
+    <div style={{flex:1}}>
+      <div style={S.hlabel(checked)}>{label}</div>
+      {note && <div style={S.hnote}>{note}</div>}
+    </div>
+    {timeTag && <div style={S.timeTag}>{timeTag}</div>}
+  </div>;
+}
+
+function Ring({pct,size=80,stroke=7,label,sub,color="#5C8B6B"}){
+  const r=(size-stroke)/2, circ=2*Math.PI*r, dash=(pct/100)*circ;
+  return <div style={{textAlign:"center"}}>
+    <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#EEF4EF" strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        style={{transition:"stroke-dasharray .6s ease"}}/>
+    </svg>
+    <div style={{marginTop:-size/2-8,marginBottom:10}}>
+      <div style={{fontSize:17,fontWeight:800,color:"#2D3436"}}>{label}</div>
+      <div style={{fontSize:10,color:"#888"}}>{sub}</div>
+    </div>
+  </div>;
+}
+
+// ── Dashboard ──
+function Dashboard({habits,weightLog,streak}){
+  const bools=Object.values(habits).filter(v=>typeof v==="boolean");
+  const done=bools.filter(Boolean).length, total=bools.length;
+  const pct=Math.round(done/total*100);
+  const latestW=weightLog.length?weightLog[weightLog.length-1].w:CURRENT_WEIGHT;
+  const lost=(CURRENT_WEIGHT-latestW).toFixed(1);
+  const toJuly=(latestW-JULY_TARGET).toFixed(1);
+  const weightPct=Math.max(0,Math.min(100,((CURRENT_WEIGHT-latestW)/(CURRENT_WEIGHT-GOAL_WEIGHT))*100));
+  const july1=new Date("2025-07-01");
+  const daysToJuly=Math.max(0,Math.ceil((july1-new Date())/(1000*60*60*24)));
+  const waterPct=Math.min(100,(habits.waterLitres/2.5)*100);
+  const curBMI=calcBMI(latestW);
+  const curBMIInfo=bmiCategory(parseFloat(curBMI));
+
+  return <div>
+    <div style={{...S.card,background:"linear-gradient(135deg,#5C8B6B11,#FAF8F3)"}}>
+      <div style={S.cardTitle}>Today's Progress</div>
+      <div style={S.ringWrap}>
+        <Ring pct={pct} label={`${pct}%`} sub="Overall" size={90}/>
+        <Ring pct={waterPct} label={`${habits.waterLitres}L`} sub="Water" color="#3498db" size={80}/>
+        <Ring pct={habits.sleepHours?Math.min(100,(habits.sleepHours/8)*100):0}
+          label={habits.sleepHours?`${habits.sleepHours}h`:"—"} sub="Sleep" color="#9B59B6" size={80}/>
+      </div>
+      <div style={{textAlign:"center",fontSize:13,color:"#888"}}>{done} of {total} habits completed</div>
+    </div>
+
+    <div style={S.bmiCard}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div>
+          <div style={{fontSize:12,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Your BMI</div>
+          <div style={{fontSize:32,fontWeight:800,color:"#C4775A",fontFamily:"'Playfair Display',serif"}}>{curBMI}</div>
+          <span style={S.pill(curBMIInfo.color)}>{curBMIInfo.label}</span>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:12,color:"#888"}}>Current</div>
+          <div style={{fontSize:22,fontWeight:800,color:"#2D3436"}}>{latestW} kg</div>
+          <div style={{fontSize:11,color:"#5C8B6B"}}>Goal: {GOAL_WEIGHT} kg</div>
+        </div>
+      </div>
+      <div style={{marginTop:10,fontSize:11,color:"#888",marginBottom:4}}>
+        Weight journey ({lost>0?`${lost}kg lost 🎉`:"Starting today 💪"})
+      </div>
+      <div style={S.prog}><div style={S.progBar(weightPct,"#C4775A")}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:"#aaa",marginTop:4}}>
+        <span>72 kg</span><span>July: {JULY_TARGET} kg</span><span>Goal: {GOAL_WEIGHT} kg</span>
+      </div>
+    </div>
+
+    <div style={S.tip}>💊 <strong>PCOS · Thyroid · Autoimmune · Psoriasis</strong> — Anti-inflammatory focus: prioritise sleep, stress management & clean eating. Avoid gluten spikes and processed sugar.</div>
+
+    <div style={S.grid2}>
+      <div style={{...S.card,margin:0}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600}}>🎯 July Countdown</div>
+        <div style={{fontSize:26,fontWeight:800,color:"#5C8B6B"}}>{daysToJuly}</div>
+        <div style={{fontSize:11,color:"#888"}}>days · {toJuly>0?`${toJuly}kg to go`:"Goal reached! 🎉"}</div>
+      </div>
+      <div style={{...S.card,margin:0}}>
+        <div style={{fontSize:11,color:"#888",fontWeight:600}}>🔥 Streak</div>
+        <div style={{fontSize:26,fontWeight:800,color:"#C4775A"}}>{streak}</div>
+        <div style={{fontSize:11,color:"#888"}}>days in a row</div>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>How are you feeling today?</div>
+      <div style={{display:"flex",justifyContent:"space-around",padding:"4px 0"}}>
+        {MOODS.map(m=><div key={m} style={{fontSize:habits.mood===m?30:22,cursor:"pointer",
+          transition:"font-size .2s",transform:habits.mood===m?"scale(1.3)":"scale(1)"}}>{m}</div>)}
+      </div>
+    </div>
+  </div>;
+}
+
+// ── Morning ──
+function MorningPage({habits,toggle}){
+  return <div>
+    <div style={S.sectionLabel}>☀️ Morning Routine</div>
+    <div style={S.tip}>🕗 School drop-off by <strong>8:30 AM</strong> · Office by <strong>10:00 AM</strong> — You have a tight but powerful 90-min window that's all yours!</div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>5:30 – 7:00 AM · Rise & Prep</div>
+      <HItem label="Wake up on time" note="Set alarm the night before" checked={habits.wakeUpOnTime} onToggle={()=>toggle("wakeUpOnTime")} timeTag="5:30 AM"/>
+      <HItem label="Thyroid tablet on empty stomach" note="Wait 30 min before eating" checked={habits.morningMeds} onToggle={()=>toggle("morningMeds")} timeTag="Empty stomach"/>
+      <HItem label="Cook daughter's breakfast" note="Oats / eggs / fruit — 20 mins max" checked={habits.cookBreakfast} onToggle={()=>toggle("cookBreakfast")} timeTag="6:00 AM"/>
+      <HItem label="Pack her lunch + YOUR office lunch" note="Home food at office = no outside temptation!" checked={habits.cookLunchPacked} onToggle={()=>toggle("cookLunchPacked")} timeTag="6:30 AM"/>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>7:00 – 8:30 AM · Breakfast & School</div>
+      <HItem label="Your anti-inflammatory breakfast" note="Eggs, nuts, berries, oats, idli" checked={habits.selfBreakfast} onToggle={()=>toggle("selfBreakfast")} timeTag="7:00 AM"/>
+      <HItem label="Daughter ready & school drop-off ✅" checked={habits.schoolDropoff} onToggle={()=>toggle("schoolDropoff")} timeTag="8:30 AM"/>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>⚡ 8:30 – 10:00 AM · Your Golden Window</div>
+      <div style={{background:"linear-gradient(135deg,#5C8B6B11,#EEF4EF)",borderRadius:12,padding:"12px 14px"}}>
+        {[["8:30","🏋️ Gym or brisk walk (45 min)",true],["9:15","🚿 Quick freshen up + AM skincare"],
+          ["9:30","🎽 Get office-ready"],["10:00","💼 Leave for office ✅"]].map(([t,a,h])=>
+          <div key={t} style={{display:"flex",gap:10,padding:"6px 0",borderBottom:"1px solid #E8F0E8"}}>
+            <div style={{fontSize:11,color:h?"#C4775A":"#888",fontWeight:700,width:50,flexShrink:0}}>{t} AM</div>
+            <div style={{fontSize:13,color:"#2D3436",fontWeight:h?700:400}}>{a}</div>
+          </div>)}
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>🏢 At Office · 10 AM – 5 PM</div>
+      <div style={{fontSize:13,color:"#5C8B6B",lineHeight:1.8,padding:"4px 0"}}>
+        🥗 <strong>Lunch:</strong> Eat your packed home food only<br/>
+        💧 <strong>Water:</strong> Bottle on desk, sip every hour<br/>
+        🧘 <strong>Micro-break:</strong> 5-min walk every 90 min<br/>
+        🎧 <strong>Commute:</strong> Audiobook / podcast instead of reels
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>🌆 Evening · 5 PM Onwards</div>
+      {[["5:00","Leave office on time 🚗"],["5:30","Daughter home / pickup"],
+        ["6:00","Her snack + homework time"],["7:00","Cook dinner (simple, anti-inflammatory)"],
+        ["7:30","Family dinner together 🍽️"],["8:30","Daughter's bedtime"],
+        ["9:00","📵 Phone down — wind-down begins"],["9:10","PM skincare + hair care"],
+        ["9:30","Read or light TV (no reels!)"],["11:00","Lights out 💤"]].map(([t,a])=>
+        <div key={t} style={{display:"flex",gap:10,padding:"7px 0",borderBottom:"1px solid #F5F0E8"}}>
+          <div style={{fontSize:11,color:"#C4775A",fontWeight:700,width:54,flexShrink:0}}>{t} PM</div>
+          <div style={{fontSize:13,color:"#2D3436"}}>{a}</div>
+        </div>)}
+    </div>
+
+    <div style={S.tip}>💡 <strong>Sunday batch prep</strong> saves your week: boil eggs, chop veggies, cook dal in bulk. 1 hour Sunday = healthy lunches all week + zero morning stress.</div>
+  </div>;
+}
+
+// ── Fitness ──
+function FitnessPage({habits,toggle}){
+  const days=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const plan=["Strength – Lower body (glutes, legs)","30-min walk + stretching",
+    "Strength – Upper body + core","Active rest – yoga / walk",
+    "Full body circuit / HIIT","Long walk / play with daughter","Rest + meal prep day 🥗"];
+  const today=new Date().toLocaleDateString("en-US",{weekday:"short"}).slice(0,3);
+  return <div>
+    <div style={S.sectionLabel}>💪 Fitness & Movement</div>
+    <div style={S.tip}>🏋️ Gym window: <strong>8:30–9:15 AM</strong> after school drop-off, before office at 10 AM. Even 3x/week is powerful for PCOS + thyroid. Walk on rest days!</div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>Today's Activity</div>
+      <HItem label="Gym session (45 min)" note="PCOS-friendly: strength + HIIT 3x/week" checked={habits.gym} onToggle={()=>toggle("gym")} timeTag="8:30 AM"/>
+      <HItem label="30-min walk (if no gym)" note="Walking reduces cortisol — great for thyroid" checked={habits.walk30} onToggle={()=>toggle("walk30")}/>
+      <HItem label="Morning stretch / yoga (10 min)" note="Reduces psoriasis inflammation" checked={habits.stretching} onToggle={()=>toggle("stretching")}/>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>📅 Weekly Plan</div>
+      {days.map((d,i)=>{
+        const isToday=today===d;
+        return <div key={d} style={{display:"flex",gap:10,padding:"8px 6px",borderBottom:"1px solid #F5F0E8",
+          background:isToday?"#EEF4EF":"transparent",borderRadius:isToday?8:0}}>
+          <div style={{fontWeight:700,color:isToday?"#5C8B6B":"#888",width:30,fontSize:13}}>{d}</div>
+          <div style={{fontSize:13,color:"#2D3436",flex:1}}>{plan[i]}</div>
+          {isToday&&<div style={{fontSize:10,background:"#5C8B6B",color:"#fff",borderRadius:99,padding:"2px 8px",fontWeight:700,alignSelf:"center"}}>TODAY</div>}
+        </div>;
+      })}
+    </div>
+    <div style={S.tip}>🌿 <strong>PCOS tip:</strong> Resistance training 3x/week + reducing refined carbs = most effective combo. Avoid over-exercising — it spikes cortisol and worsens PCOS.</div>
+  </div>;
+}
+
+// ── Nutrition ──
+function NutritionPage({habits,toggle,update}){
+  return <div>
+    <div style={S.sectionLabel}>🥗 Eat Clean</div>
+    <div style={S.tip}>🚫 Goal: <strong>Zero outside food.</strong> PCOS + psoriasis both respond dramatically to clean diet. Pack your office lunch every day!</div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>Today's Nutrition</div>
+      <HItem label="Packed lunch brought to office" checked={habits.cookLunchPacked} onToggle={()=>toggle("cookLunchPacked")} note="No canteen / ordering — home food = healing food"/>
+      <HItem label="Ate only home-cooked meals" checked={habits.cleanEating} onToggle={()=>toggle("cleanEating")} note="Anti-inflammatory: no processed, no refined sugar"/>
+      <HItem label="No outside / ordered food ✅" checked={habits.noOutsideFood} onToggle={()=>toggle("noOutsideFood")}/>
+      <HItem label="Vitamins / supplements taken" checked={habits.vitamins} onToggle={()=>toggle("vitamins")} note="Inositol, Vit D3, Omega-3 — ask your doctor"/>
+      <div style={{marginTop:14}}>
+        <div style={{fontSize:13,fontWeight:600,color:"#2D3436",marginBottom:8}}>
+          💧 Water: <strong style={{color:"#3498db"}}>{habits.waterLitres}L</strong> / 2.5L goal
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {[0.5,1,1.5,2,2.5,3].map(v=><button key={v} onClick={()=>update("waterLitres",v)} style={{
+            padding:"6px 14px",borderRadius:99,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:600,
+            borderColor:habits.waterLitres>=v?"#3498db":"#E0D9CC",
+            background:habits.waterLitres>=v?"#3498db22":"#fff",
+            color:habits.waterLitres>=v?"#3498db":"#888"}}>{v}L</button>)}
+        </div>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>🌿 Anti-Inflammatory Meal Guide</div>
+      {[["Breakfast","Eggs + veggies, oats + seeds, idli with chutney","Bread, biscuits, sugary cereals"],
+        ["Lunch","Dal + small rice + sabzi + curd","Maida, fried items"],
+        ["Snack (Office)","Nuts, fruit, boiled chana, cucumber","Chips, bakery, outside tea"],
+        ["Dinner","Soup + sabzi + 1-2 roti or khichdi","Heavy carbs after 7 PM"]].map(([m,f,a])=>
+        <div key={m} style={{padding:"10px 0",borderBottom:"1px solid #F5F0E8"}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#5C8B6B"}}>{m}</div>
+          <div style={{fontSize:12,color:"#2D3436",marginTop:2}}>✅ {f}</div>
+          <div style={{fontSize:11,color:"#C4775A",marginTop:2}}>🚫 Avoid: {a}</div>
+        </div>)}
+    </div>
+  </div>;
+}
+
+// ── Wellness ──
+function WellnessPage({habits,toggle,update}){
+  return <div>
+    <div style={S.sectionLabel}>✨ Wellness & Self-Care</div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>🌅 Morning Skin Routine</div>
+      <HItem label="AM skincare done" checked={habits.skinAM} onToggle={()=>toggle("skinAM")}
+        note="Cleanser → Vitamin C serum → Moisturiser → SPF (psoriasis-friendly)"/>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>🌙 Evening Self-Care</div>
+      <HItem label="PM skincare done" checked={habits.skinPM} onToggle={()=>toggle("skinPM")}
+        note="Double cleanse → Niacinamide → Retinol (2-3x/week) → Moisturise"/>
+      <HItem label="Hair care (oiling / treatment)" checked={habits.hairCare} onToggle={()=>toggle("hairCare")}
+        note="Castor oil + rosemary oil — great for PCOS hair fall"/>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>😴 Sleep & Screen</div>
+      <HItem label="No doomscrolling after 9 PM" checked={habits.noScroll9pm} onToggle={()=>toggle("noScroll9pm")}
+        note="Replace with book, skincare or light stretching"/>
+      <HItem label="In bed by 11 PM" checked={habits.inBedBy11} onToggle={()=>toggle("inBedBy11")}
+        note="Sleep is #1 for PCOS, thyroid & skin healing"/>
+      <div style={{marginTop:14}}>
+        <div style={{fontSize:13,fontWeight:600,color:"#2D3436",marginBottom:8}}>
+          🌙 Hours slept: <strong style={{color:"#9B59B6"}}>{habits.sleepHours||"—"}</strong>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {[5,6,7,7.5,8,9].map(v=><button key={v} onClick={()=>update("sleepHours",v)} style={{
+            padding:"6px 14px",borderRadius:99,border:"1.5px solid",cursor:"pointer",fontSize:12,fontWeight:600,
+            borderColor:habits.sleepHours===v?"#9B59B6":"#E0D9CC",
+            background:habits.sleepHours===v?"#9B59B622":"#fff",
+            color:habits.sleepHours===v?"#9B59B6":"#888"}}>{v}h</button>)}
+        </div>
+      </div>
+    </div>
+
+    <div style={S.tip}>🌿 <strong>Psoriasis:</strong> Moisturise twice daily with fragrance-free cream. Stress and poor sleep are major triggers — your evening routine directly heals your skin.</div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>Evening Wind-Down Schedule</div>
+      {[["9:00","Phone on silent / downtime mode"],["9:10","PM skincare (10 mins)"],
+        ["9:30","Read book or watch something light"],["10:30","Hair oiling (2-3x/week)"],
+        ["11:00","Lights out 💤"]].map(([t,a])=>
+        <div key={t} style={{display:"flex",gap:12,padding:"8px 0",borderBottom:"1px solid #F5F0E8"}}>
+          <div style={{fontSize:11,color:"#C4775A",fontWeight:700,width:54,flexShrink:0}}>{t} PM</div>
+          <div style={{fontSize:13,color:"#2D3436"}}>{a}</div>
+        </div>)}
+    </div>
+  </div>;
+}
+
+// ── Learn / Books ──
+function LearnPage({habits,toggle}){
+  const [bookTitle,setBookTitle]=useState("");
+  const [bookAuthor,setBookAuthor]=useState("");
+  const [techTopic,setTechTopic]=useState("");
+  const [books,setBooks]=useState(()=>{try{return JSON.parse(localStorage.getItem("lft-books")||"[]")}catch{return[]}});
+  const [techs,setTechs]=useState(()=>{try{return JSON.parse(localStorage.getItem("lft-techs")||"[]")}catch{return[]}});
+  const [pagesInput,setPagesInput]=useState("");
+
+  const addBook=()=>{
+    if(!bookTitle.trim())return;
+    const u=[...books,{title:bookTitle,author:bookAuthor,done:false,pages:0,addedDate:toDateKey()}];
+    setBooks(u);localStorage.setItem("lft-books",JSON.stringify(u));
+    setBookTitle("");setBookAuthor("");
+  };
+  const addTech=()=>{if(!techTopic.trim())return;const u=[...techs,{title:techTopic,done:false}];setTechs(u);localStorage.setItem("lft-techs",JSON.stringify(u));setTechTopic("");};
+  const toggleBook=i=>{const u=books.map((b,idx)=>idx===i?{...b,done:!b.done,doneDate:!b.done?toDateKey():null}:b);setBooks(u);localStorage.setItem("lft-books",JSON.stringify(u));};
+  const toggleTech=i=>{const u=techs.map((t,idx)=>idx===i?{...t,done:!t.done}:t);setTechs(u);localStorage.setItem("lft-techs",JSON.stringify(u));};
+  const deleteBook=i=>{const u=books.filter((_,idx)=>idx!==i);setBooks(u);localStorage.setItem("lft-books",JSON.stringify(u));};
+  const deleteTech=i=>{const u=techs.filter((_,idx)=>idx!==i);setTechs(u);localStorage.setItem("lft-techs",JSON.stringify(u));};
+
+  const totalBooks=books.length, doneBooks=books.filter(b=>b.done).length;
+
+  return <div>
+    <div style={S.sectionLabel}>📚 Books & Learning</div>
+    <div style={S.tip}>🎧 Use your <strong>commute</strong> for audiobooks or podcasts. Read at <strong>9:30 PM</strong> instead of scrolling. Even 20 pages/day = <strong>12+ books a year!</strong></div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>Today's Learning</div>
+      <HItem label="Read for 20+ mins today" checked={habits.reading} onToggle={()=>toggle("reading")} note="Bedtime reading > doomscrolling 🌙"/>
+      <HItem label="Tech learning session (30+ mins)" checked={habits.techLearning} onToggle={()=>toggle("techLearning")} note="YouTube / course / docs — all counts!"/>
+    </div>
+
+    {/* Reading stats */}
+    <div style={{...S.grid2,marginBottom:14}}>
+      <div style={{...S.card,margin:0,textAlign:"center"}}>
+        <div style={{fontSize:28,fontWeight:800,color:"#5C8B6B"}}>{doneBooks}</div>
+        <div style={{fontSize:11,color:"#888"}}>Books finished</div>
+      </div>
+      <div style={{...S.card,margin:0,textAlign:"center"}}>
+        <div style={{fontSize:28,fontWeight:800,color:"#C4775A"}}>{totalBooks-doneBooks}</div>
+        <div style={{fontSize:11,color:"#888"}}>To read</div>
+      </div>
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>📖 My Book List</div>
+      <div style={{marginBottom:10}}>
+        <input style={{...S.inp,marginBottom:8}} placeholder="Book title *" value={bookTitle} onChange={e=>setBookTitle(e.target.value)}/>
+        <input style={{...S.inp,marginBottom:8}} placeholder="Author (optional)" value={bookAuthor} onChange={e=>setBookAuthor(e.target.value)}/>
+        <button onClick={addBook} style={S.btn}>+ Add Book</button>
+      </div>
+      {books.length===0&&<div style={{fontSize:12,color:"#aaa",textAlign:"center",padding:10}}>No books yet — add your first one!</div>}
+      {books.map((b,i)=><div key={i} style={{padding:"10px 0",borderBottom:"1px solid #F5F0E8"}}>
+        <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <Checkbox checked={b.done} onClick={()=>toggleBook(i)}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,textDecoration:b.done?"line-through":"none",color:b.done?"#aaa":"#2D3436"}}>{b.title}</div>
+            {b.author&&<div style={{fontSize:11,color:"#888"}}>by {b.author}</div>}
+            {b.done&&b.doneDate&&<div style={{fontSize:10,color:"#5C8B6B",marginTop:2}}>✅ Finished {b.doneDate}</div>}
+          </div>
+          <div onClick={()=>deleteBook(i)} style={{fontSize:16,color:"#ddd",cursor:"pointer",padding:"0 4px"}}>×</div>
+        </div>
+      </div>)}
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>💻 Tech I'm Learning</div>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <input style={{...S.inp,flex:1}} placeholder="e.g. React, AI, Python..." value={techTopic}
+          onChange={e=>setTechTopic(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTech()}/>
+        <button onClick={addTech} style={{...S.btn,width:"auto",padding:"8px 16px",marginTop:0}}>+</button>
+      </div>
+      {techs.length===0&&<div style={{fontSize:12,color:"#aaa",textAlign:"center",padding:10}}>Add a tech topic to master!</div>}
+      {techs.map((t,i)=><div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 0",borderBottom:"1px solid #F5F0E8"}}>
+        <Checkbox checked={t.done} onClick={()=>toggleTech(i)}/>
+        <div style={{fontSize:13,flex:1,textDecoration:t.done?"line-through":"none",color:t.done?"#aaa":"#2D3436"}}>{t.title}</div>
+        <div onClick={()=>deleteTech(i)} style={{fontSize:16,color:"#ddd",cursor:"pointer",padding:"0 4px"}}>×</div>
+      </div>)}
+    </div>
+  </div>;
+}
+
+// ── Expenses ──
+const EXPENSE_CATS = [
+  {label:"🛒 Groceries",color:"#27ae60"},
+  {label:"🍽️ Food/Outside",color:"#e74c3c"},
+  {label:"🚗 Transport",color:"#3498db"},
+  {label:"👧 Daughter",color:"#9B59B6"},
+  {label:"💊 Health",color:"#e67e22"},
+  {label:"👗 Shopping",color:"#e91e8c"},
+  {label:"🏠 Home",color:"#795548"},
+  {label:"📚 Learning",color:"#5C8B6B"},
+  {label:"💆 Self-care",color:"#C4775A"},
+  {label:"🎯 Other",color:"#888"},
+];
+
+function ExpensesPage(){
+  const [expenses,setExpenses]=useState(()=>{try{return JSON.parse(localStorage.getItem("lft-expenses")||"[]")}catch{return[]}});
+  const [amount,setAmount]=useState("");
+  const [note,setNote]=useState("");
+  const [cat,setCat]=useState(EXPENSE_CATS[0].label);
+  const [filter,setFilter]=useState("all");
+  const [budget,setBudget]=useState(()=>localStorage.getItem("lft-budget")||"");
+  const [budgetInput,setBudgetInput]=useState("");
+  const [showBudgetEdit,setShowBudgetEdit]=useState(false);
+
+  const saveExpenses=u=>{setExpenses(u);localStorage.setItem("lft-expenses",JSON.stringify(u));};
+
+  const addExpense=()=>{
+    const a=parseFloat(amount);
+    if(!a||a<=0)return;
+    const u=[{id:Date.now(),amount:a,note,cat,date:toDateKey()},...expenses];
+    saveExpenses(u);setAmount("");setNote("");
+  };
+
+  const deleteExpense=id=>saveExpenses(expenses.filter(e=>e.id!==id));
+
+  const saveBudget=()=>{localStorage.setItem("lft-budget",budgetInput);setBudget(budgetInput);setBudgetInput("");setShowBudgetEdit(false);};
+
+  // This month
+  const thisMonth=new Date().toISOString().slice(0,7);
+  const thisWeek=(()=>{const d=new Date();const day=d.getDay();const diff=d.getDate()-day+(day===0?-6:1);const mon=new Date(d.setDate(diff));return mon.toISOString().slice(0,10);})();
+
+  const monthExpenses=expenses.filter(e=>e.date.startsWith(thisMonth));
+  const todayExpenses=expenses.filter(e=>e.date===toDateKey());
+  const weekExpenses=expenses.filter(e=>e.date>=thisWeek);
+
+  const totalMonth=monthExpenses.reduce((s,e)=>s+e.amount,0);
+  const totalToday=todayExpenses.reduce((s,e)=>s+e.amount,0);
+  const totalWeek=weekExpenses.reduce((s,e)=>s+e.amount,0);
+
+  const budgetNum=parseFloat(budget)||0;
+  const budgetPct=budgetNum?Math.min(100,(totalMonth/budgetNum)*100):0;
+  const budgetLeft=budgetNum-totalMonth;
+
+  // Category breakdown
+  const catTotals=EXPENSE_CATS.map(c=>({
+    ...c,
+    total:monthExpenses.filter(e=>e.cat===c.label).reduce((s,e)=>s+e.amount,0)
+  })).filter(c=>c.total>0).sort((a,b)=>b.total-a.total);
+
+  const displayExpenses=filter==="today"?todayExpenses:filter==="week"?weekExpenses:monthExpenses;
+
+  // Outside food this month
+  const outsideFood=monthExpenses.filter(e=>e.cat==="🍽️ Food/Outside").reduce((s,e)=>s+e.amount,0);
+
+  return <div>
+    <div style={S.sectionLabel}>💰 Expense Tracker</div>
+
+    {/* Budget overview */}
+    {budgetNum>0&&<div style={{...S.bmiCard,background:"linear-gradient(135deg,#5C8B6B22,#5C8B6B11)",border:"1px solid #5C8B6B33"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+        <div>
+          <div style={{fontSize:11,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Monthly Budget</div>
+          <div style={{fontSize:28,fontWeight:800,color:"#5C8B6B"}}>₹{totalMonth.toFixed(0)}</div>
+          <div style={{fontSize:12,color:"#888"}}>of ₹{budgetNum.toFixed(0)}</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:11,color:"#888"}}>Remaining</div>
+          <div style={{fontSize:22,fontWeight:800,color:budgetLeft>=0?"#27ae60":"#e74c3c"}}>
+            ₹{Math.abs(budgetLeft).toFixed(0)}
+          </div>
+          <div style={{fontSize:11,color:budgetLeft>=0?"#27ae60":"#e74c3c"}}>{budgetLeft>=0?"left":"over budget!"}</div>
+        </div>
+      </div>
+      <div style={S.prog}><div style={S.progBar(budgetPct,budgetPct>90?"#e74c3c":budgetPct>70?"#e67e22":"#5C8B6B")}/></div>
+      {outsideFood>0&&<div style={{marginTop:8,fontSize:11,color:"#e74c3c"}}>⚠️ Outside food this month: <strong>₹{outsideFood.toFixed(0)}</strong> — pack that lunch!</div>}
+    </div>}
+
+    {/* Quick stats */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+      {[["Today","₹"+totalToday.toFixed(0),"#3498db"],["This Week","₹"+totalWeek.toFixed(0),"#9B59B6"],["This Month","₹"+totalMonth.toFixed(0),"#C4775A"]].map(([l,v,c])=>
+        <div key={l} style={{...S.card,margin:0,textAlign:"center",padding:"12px 8px"}}>
+          <div style={{fontSize:11,color:"#888"}}>{l}</div>
+          <div style={{fontSize:16,fontWeight:800,color:c}}>{v}</div>
+        </div>)}
+    </div>
+
+    {/* Set budget */}
+    {!budgetNum||showBudgetEdit?<div style={S.card}>
+      <div style={S.cardTitle}>Set Monthly Budget</div>
+      <div style={{display:"flex",gap:8}}>
+        <input style={{...S.inp,flex:1}} type="number" placeholder="e.g. 30000" value={budgetInput} onChange={e=>setBudgetInput(e.target.value)}/>
+        <button onClick={saveBudget} style={{...S.btn,width:"auto",marginTop:0,padding:"10px 16px"}}>Save</button>
+      </div>
+    </div>:
+    <div style={{textAlign:"right",marginBottom:10}}>
+      <span onClick={()=>setShowBudgetEdit(true)} style={{fontSize:12,color:"#5C8B6B",cursor:"pointer",fontWeight:600}}>✏️ Edit budget</span>
+    </div>}
+
+    {/* Add expense */}
+    <div style={S.card}>
+      <div style={S.cardTitle}>+ Add Expense</div>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <div style={{position:"relative",flex:1}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#888",fontSize:14}}>₹</span>
+          <input style={{...S.inp,paddingLeft:22}} type="number" placeholder="Amount" value={amount} onChange={e=>setAmount(e.target.value)}/>
+        </div>
+        <input style={{...S.inp,flex:1}} placeholder="Note (optional)" value={note} onChange={e=>setNote(e.target.value)}/>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+        {EXPENSE_CATS.map(c=><div key={c.label} onClick={()=>setCat(c.label)} style={{
+          padding:"5px 10px",borderRadius:99,fontSize:11,fontWeight:600,cursor:"pointer",
+          background:cat===c.label?c.color+"33":"#F5F0E8",
+          color:cat===c.label?c.color:"#888",
+          border:`1.5px solid ${cat===c.label?c.color:"transparent"}`,
+        }}>{c.label}</div>)}
+      </div>
+      <button onClick={addExpense} style={S.btn}>Add Expense</button>
+    </div>
+
+    {/* Category breakdown */}
+    {catTotals.length>0&&<div style={S.card}>
+      <div style={S.cardTitle}>📊 This Month by Category</div>
+      {catTotals.map(c=><div key={c.label} style={{marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
+          <span style={{fontWeight:600,color:"#2D3436"}}>{c.label}</span>
+          <span style={{fontWeight:700,color:c.color}}>₹{c.total.toFixed(0)}</span>
+        </div>
+        <div style={S.prog}><div style={S.progBar(totalMonth?c.total/totalMonth*100:0,c.color)}/></div>
+      </div>)}
+    </div>}
+
+    {/* Expense list */}
+    <div style={S.card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={S.cardTitle}>Recent Expenses</div>
+        <div style={{display:"flex",gap:6}}>
+          {["today","week","all"].map(f=><div key={f} onClick={()=>setFilter(f)} style={{
+            fontSize:11,fontWeight:600,cursor:"pointer",padding:"3px 8px",borderRadius:99,
+            background:filter===f?"#5C8B6B":"#F0EBE0",color:filter===f?"#fff":"#888"
+          }}>{f==="all"?"Month":f.charAt(0).toUpperCase()+f.slice(1)}</div>)}
+        </div>
+      </div>
+      {displayExpenses.length===0&&<div style={{fontSize:12,color:"#aaa",textAlign:"center",padding:12}}>No expenses logged yet!</div>}
+      {displayExpenses.map(e=>{
+        const c=EXPENSE_CATS.find(c=>c.label===e.cat)||EXPENSE_CATS[EXPENSE_CATS.length-1];
+        return <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid #F5F0E8"}}>
+          <div style={{width:32,height:32,borderRadius:10,background:c.color+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>
+            {e.cat.split(" ")[0]}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:"#2D3436"}}>{e.note||e.cat}</div>
+            <div style={{fontSize:11,color:"#888"}}>{e.date} · {e.cat}</div>
+          </div>
+          <div style={{fontWeight:700,color:c.color,fontSize:14}}>₹{e.amount.toFixed(0)}</div>
+          <div onClick={()=>deleteExpense(e.id)} style={{fontSize:16,color:"#ddd",cursor:"pointer",padding:"0 4px"}}>×</div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+// ── Goals ──
+function GoalsPage({weightLog}){
+  const [inputW,setInputW]=useState("");
+  const [log,setLog]=useState(weightLog);
+  const addWeight=()=>{
+    const w=parseFloat(inputW);
+    if(!w||w<40||w>150)return;
+    const entry={date:toDateKey(),w};
+    const updated=[...log.filter(e=>e.date!==entry.date),entry].sort((a,b)=>a.date.localeCompare(b.date));
+    setLog(updated);localStorage.setItem(WEIGHT_KEY,JSON.stringify(updated));setInputW("");
+  };
+  const latestW=log.length?log[log.length-1].w:CURRENT_WEIGHT;
+  const lost=(CURRENT_WEIGHT-latestW).toFixed(1);
+  const milestones=[
+    {label:"Start",weight:72,date:"Now",done:true,color:"#888"},
+    {label:"First 2kg",weight:70,date:"May–June",done:latestW<=70,color:"#5C8B6B"},
+    {label:"July Goal 🎯",weight:66,date:"July 2025",done:latestW<=66,color:"#C4775A"},
+    {label:"Halfway",weight:67,date:"Aug",done:latestW<=67,color:"#5C8B6B"},
+    {label:"Dream Weight ⭐",weight:62,date:"End Goal",done:latestW<=62,color:"#9B59B6"},
+  ];
+
+  return <div>
+    <div style={S.sectionLabel}>🎯 Goals & Progress</div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>Log Today's Weight</div>
+      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}>
+        <input style={{...S.inp,flex:1}} type="number" placeholder="e.g. 71.5" value={inputW} onChange={e=>setInputW(e.target.value)}/>
+        <span style={{fontSize:13,color:"#888"}}>kg</span>
+        <button onClick={addWeight} style={{...S.btn,width:"auto",marginTop:0,padding:"10px 18px"}}>Log</button>
+      </div>
+      <div style={{marginTop:10,fontSize:13,color:"#5C8B6B"}}>
+        Current: <strong>{latestW} kg</strong> · {lost>0?<><strong style={{color:"#5C8B6B"}}>{lost} kg lost 🎉</strong></>:"Just starting — you got this! 💪"}
+      </div>
+    </div>
+
+    {log.length>1&&<div style={S.card}>
+      <div style={S.cardTitle}>Weight Trend</div>
+      <svg width="100%" height="100" viewBox={`0 0 ${log.length*40} 100`} preserveAspectRatio="none" style={{overflow:"visible"}}>
+        <defs>
+          <linearGradient id="wg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#5C8B6B" stopOpacity="0.3"/>
+            <stop offset="100%" stopColor="#5C8B6B" stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {(()=>{
+          const ws=log.map(l=>l.w);
+          const minW=Math.min(...ws,GOAL_WEIGHT)-1,maxW=Math.max(...ws)+1;
+          const toY=w=>90-((w-minW)/(maxW-minW))*80;
+          const pts=log.map((l,i)=>`${i*40+20},${toY(l.w)}`).join(" ");
+          const area=`20,90 ${pts} ${(log.length-1)*40+20},90`;
+          return <>
+            <polyline points={pts} fill="none" stroke="#5C8B6B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <polygon points={area} fill="url(#wg)"/>
+            {log.map((l,i)=><g key={i}>
+              <circle cx={i*40+20} cy={toY(l.w)} r="4" fill="#5C8B6B"/>
+              <text x={i*40+20} y={toY(l.w)-8} textAnchor="middle" fontSize="9" fill="#5C8B6B" fontWeight="700">{l.w}</text>
+            </g>)}
+            <line x1="0" y1={toY(GOAL_WEIGHT)} x2={log.length*40} y2={toY(GOAL_WEIGHT)} stroke="#C4775A" strokeWidth="1" strokeDasharray="4,3"/>
+            <text x={log.length*40-2} y={toY(GOAL_WEIGHT)-4} textAnchor="end" fontSize="9" fill="#C4775A">Goal:{GOAL_WEIGHT}kg</text>
+          </>;
+        })()}
+      </svg>
+    </div>}
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>🏅 Weight Milestones</div>
+      {milestones.map((m,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F5F0E8"}}>
+        <div style={{width:32,height:32,borderRadius:"50%",background:m.done?m.color:"#F0EBE0",
+          display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:m.done?"#fff":"#ccc",flexShrink:0}}>
+          {m.done?"✓":i+1}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:700,color:m.done?m.color:"#2D3436"}}>{m.label}</div>
+          <div style={{fontSize:11,color:"#888"}}>{m.weight} kg · {m.date}</div>
+        </div>
+        {m.done&&<span style={S.pill(m.color)}>Done!</span>}
+      </div>)}
+    </div>
+
+    <div style={S.card}>
+      <div style={S.cardTitle}>📌 Life Goals</div>
+      {[
+        {goal:"Lose 6kg by July",progress:Math.min(100,((CURRENT_WEIGHT-latestW)/6)*100),color:"#C4775A"},
+        {goal:"Gym 3x/week consistently",progress:0,color:"#5C8B6B"},
+        {goal:"No outside food – 30 days",progress:0,color:"#27ae60"},
+        {goal:"Sleep 7–8h daily",progress:0,color:"#9B59B6"},
+        {goal:"Read 1 book/month",progress:0,color:"#3498db"},
+      ].map(({goal,progress,color})=><div key={goal} style={{marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+          <span style={{color:"#2D3436",fontWeight:600}}>{goal}</span>
+          <span style={{color,fontWeight:700}}>{Math.round(progress)}%</span>
+        </div>
+        <div style={S.prog}><div style={S.progBar(progress,color)}/></div>
+      </div>)}
+    </div>
+  </div>;
+}
+
+// ── Main App ──
+function App(){
+  const [tab,setTab]=useState("dashboard");
+  const [habits,setHabits]=useState(defaultHabits);
+  const [weightLog,setWeightLog]=useState([{date:toDateKey(),w:CURRENT_WEIGHT}]);
+  const [streak,setStreak]=useState(1);
+
+  useEffect(()=>{
+    try{
+      const saved=localStorage.getItem(STORAGE_KEY+toDateKey());
+      if(saved)setHabits(JSON.parse(saved));
+      const wlog=localStorage.getItem(WEIGHT_KEY);
+      if(wlog)setWeightLog(JSON.parse(wlog));
+    }catch{}
+  },[]);
+
+  useEffect(()=>{
+    try{localStorage.setItem(STORAGE_KEY+toDateKey(),JSON.stringify(habits));}catch{}
+  },[habits]);
+
+  const toggle=useCallback(key=>setHabits(h=>({...h,[key]:!h[key]})),[]);
+  const update=useCallback((key,val)=>setHabits(h=>({...h,[key]:val})),[]);
+
+  const today=new Date();
+  const dayName=today.toLocaleDateString("en-US",{weekday:"long"});
+  const dateStr=today.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
+
+  const bools=Object.values(habits).filter(v=>typeof v==="boolean");
+  const completedCount=bools.filter(Boolean).length;
+
+  const greeting=completedCount===0?"Good morning, Superwoman! 🌸":
+    completedCount<5?"You're getting there! 💪":
+    completedCount<10?"Amazing progress today! 🌟":"Crushing it! You're unstoppable! 🔥";
+
+  const props={habits,toggle,update,weightLog,streak};
+
+  return <div style={S.app}>
+    <div style={S.header}>
+      <div style={S.greeting}>{greeting}</div>
+      <div style={S.dateStr}>{dayName}, {dateStr}</div>
+      <div style={S.streakRow}>
+        <div style={S.badge}>🔥 {streak} day streak</div>
+        <div style={S.badge}>✅ {completedCount}/{bools.length} done</div>
+        <div style={S.badge}>⚖️ BMI {calcBMI(CURRENT_WEIGHT)}</div>
+      </div>
+    </div>
+
+    <div style={S.page}>
+      {tab==="dashboard"&&<Dashboard {...props}/>}
+      {tab==="morning"&&<MorningPage {...props}/>}
+      {tab==="fitness"&&<FitnessPage {...props}/>}
+      {tab==="nutrition"&&<NutritionPage {...props}/>}
+      {tab==="wellness"&&<WellnessPage {...props}/>}
+      {tab==="learn"&&<LearnPage {...props}/>}
+      {tab==="expenses"&&<ExpensesPage/>}
+      {tab==="goals"&&<GoalsPage {...props}/>}
+    </div>
+
+    <div style={S.nav}>
+      {TABS.map(({id,label,icon})=>{
+        const a=tab===id;
+        return <div key={id} style={S.navItem(a)} onClick={()=>setTab(id)}>
+          <span style={S.navIcon}>{icon}</span>
+          <span style={S.navLabel(a)}>{label}</span>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
